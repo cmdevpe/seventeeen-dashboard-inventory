@@ -1,0 +1,92 @@
+<!-- Header Partial -->
+<header class="header-bar sticky top-0 z-50 px-4 md:px-6 py-3 md:py-4">
+  <div class="max-w-7xl mx-auto">
+    <!-- Mobile Layout: Stacked -->
+    <div class="flex items-center justify-between gap-3">
+      <!-- Left: Logo & Title -->
+      <div class="flex items-center gap-2 md:gap-3">
+        <img
+          src="logo.png"
+          alt="Logo"
+          class="w-9 h-9 md:w-10 md:h-10 rounded-lg object-cover"
+        />
+        <div>
+          <h1
+            class="text-base md:text-lg font-semibold text-[#0c4a6e] leading-tight"
+          >
+            Análisis de Inventario
+          </h1>
+          <p class="text-[10px] md:text-xs text-slate-500 hidden md:block">
+            IMPORTACIONES SEVENTEEN PERÚ
+          </p>
+        </div>
+      </div>
+
+      <!-- Right: Actions (Desktop) -->
+      <div class="hidden md:flex items-center gap-3">
+        <div
+          id="status-indicator"
+          class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 border border-slate-200"
+        >
+          <span
+            class="w-2 h-2 rounded-full bg-slate-400"
+            id="status-dot"
+          ></span>
+          <span class="text-xs text-slate-500" id="status-text"
+            >Cargando...</span
+          >
+        </div>
+        <input
+          type="file"
+          id="excel-file-input"
+          accept=".xlsx,.xls"
+          class="hidden"
+          onchange="uploadExcel(event)"
+        />
+        <button
+          onclick="document.getElementById('excel-file-input').click()"
+          class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 border border-slate-200"
+        >
+          <i class="fa-solid fa-file-excel"></i>
+          Cargar Inventario
+        </button>
+        <button
+          onclick="loadData()"
+          class="px-4 py-2 bg-[#37b6fb] hover:bg-[#1da1e6] text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+        >
+          <i class="fa-solid fa-rotate"></i>
+          Actualizar
+        </button>
+      </div>
+
+      <!-- Right: Actions (Mobile) - Compact icons -->
+      <div class="flex md:hidden items-center gap-2">
+        <div
+          id="status-indicator-mobile"
+          class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200"
+        >
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+          <span
+            class="text-[10px] text-emerald-700 font-medium"
+            id="status-text-mobile"
+            >Listo</span
+          >
+        </div>
+        <button
+          onclick="document.getElementById('excel-file-input').click()"
+          class="w-9 h-9 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-sm flex items-center justify-center border border-slate-200"
+          title="Cargar Excel"
+        >
+          <i class="fa-solid fa-file-excel"></i>
+        </button>
+        <button
+          onclick="loadData()"
+          class="w-9 h-9 bg-[#37b6fb] hover:bg-[#1da1e6] text-white rounded-lg text-sm flex items-center justify-center"
+          title="Actualizar"
+        >
+          <i class="fa-solid fa-rotate"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+</header>
