@@ -350,15 +350,6 @@
           ></div>
         </section>
 
-        <!-- Alerts Summary -->
-        <section id="alerts-section">
-          <h2 class="section-title">
-            <i class="fa-solid fa-boxes-stacked"></i>
-            Estado del stock
-          </h2>
-          <div class="card" id="stock-status-panel"></div>
-        </section>
-
         <!-- Charts Row -->
         <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <!-- Top Proveedores -->
@@ -424,6 +415,15 @@
           <div class="h-72">
             <canvas id="brands-chart"></canvas>
           </div>
+        </section>
+
+        <!-- Estado del Stock -->
+        <section id="alerts-section">
+          <h2 class="section-title">
+            <i class="fa-solid fa-boxes-stacked"></i>
+            Estado del stock
+          </h2>
+          <div class="card" id="stock-status-panel"></div>
         </section>
 
         <!-- Search Section -->
@@ -1099,7 +1099,6 @@
         const query = document.getElementById("search-input").value;
         const category = document.getElementById("filter-category").value;
         const status = document.getElementById("filter-status").value;
-        const abc = document.getElementById("filter-abc").value;
         const limit = getItemsPerPage();
 
         try {
@@ -1107,7 +1106,6 @@
           if (query) params.append("q", query);
           if (category) params.append("category", category);
           if (status) params.append("status", status);
-          if (abc) params.append("abc", abc);
           params.append("page", page);
           params.append("limit", limit);
 
@@ -1193,7 +1191,6 @@
                             <th class="text-right py-2 px-3">Stock</th>
                             <th class="text-right py-2 px-3">Valor</th>
                             <th class="text-center py-2 px-3">Estado</th>
-                            <th class="text-center py-2 px-3">ABC</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
@@ -1209,9 +1206,6 @@
                                 <td class="py-2 px-3 text-right ${item.stock < 0 ? "text-red-500" : "text-slate-600"} font-mono">${formatNumber(item.stock)}</td>
                                 <td class="py-2 px-3 text-right text-[#0c4a6e] font-medium">${formatCurrency(item.value)}</td>
                                 <td class="py-2 px-3 text-center">${getStatusBadge(item.status)}</td>
-                                <td class="py-2 px-3 text-center">
-                                    <span class="px-2 py-0.5 rounded text-xs font-medium ${getABCClass(item.abc_class)}">${item.abc_class}</span>
-                                </td>
                             </tr>
                         `,
                           )
