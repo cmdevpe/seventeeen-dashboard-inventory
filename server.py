@@ -600,10 +600,11 @@ def search_products():
     filtered = df[mask]
     
     # Aplicar ordenamiento
-    if sort == 'date_desc' and 'F. Creación' in filtered.columns:
-        filtered = filtered.sort_values('F. Creación', ascending=False, na_position='last')
-    elif sort == 'date_asc' and 'F. Creación' in filtered.columns:
-        filtered = filtered.sort_values('F. Creación', ascending=True, na_position='last')
+    if sort in ('date_desc', 'date_asc') and 'F. Creación' in filtered.columns:
+        filtered = filtered.copy()
+        filtered['_fecha_dt'] = pd.to_datetime(filtered['F. Creación'], errors='coerce')
+        filtered = filtered.sort_values('_fecha_dt', ascending=(sort == 'date_asc'), na_position='last')
+        filtered = filtered.drop(columns=['_fecha_dt'])
     elif sort == 'value_desc':
         filtered = filtered.sort_values('_cost_t', ascending=False)
     elif sort == 'value_asc':
