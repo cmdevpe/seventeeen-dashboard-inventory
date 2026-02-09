@@ -625,8 +625,7 @@ def search_products():
         'pages': (total + limit - 1) // limit
     })
 
-# Cargar inventario al iniciar (fuera del if para que funcione con Flask reloader)
-load_default_inventory()
+# Ya no se carga inventario al iniciar - el usuario debe subir su archivo
 
 # Ejecutar
 if __name__ == '__main__':
