@@ -520,8 +520,11 @@
         }
       }
 
-      // API Base URL
-      const API_URL = "http://localhost:5000/api";
+      // API Base URL - Detectar ambiente automáticamente
+      const isProduction =
+        window.location.hostname !== "localhost" &&
+        window.location.hostname !== "127.0.0.1";
+      const API_URL = isProduction ? "/api" : "http://localhost:5000/api";
 
       // Chart instances
       let abcChart = null;
