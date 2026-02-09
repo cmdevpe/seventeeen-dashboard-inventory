@@ -442,9 +442,45 @@ def get_brands():
     
     result = []
     for _, row in brand_analysis.head(15).iterrows():
-        if pd.notna(row['brand']) and row['brand'] != '':
             result.append({
                 'brand': row['brand'],
+                'products': int(row['products']),
+                'stock': int(row['stock']),
+                'value': round(float(row['value']), 2),
+                'value_pct': round(row['value'] / total_value * 100, 1) if total_value > 0 else 0
+            })
+    
+    return jsonify(result)
+
+@app.route('/api/suppliers')
+def get_suppliers():
+    """Retorna el análisis por proveedor"""
+    if inventory_data is None:
+        return jsonify({'error': 'No data loaded'}), 400
+    
+    df = get_analysis()
+    
+    # Columna de proveedor
+    COL_SUPPLIER = 'Proveedor'
+    if COL_SUPPLIER not in df.columns:
+        return jsonify({'error': 'Supplier column not found'}), 400
+    
+    supplier_analysis = df.groupby(COL_SUPPLIER).agg({
+        'ID': 'count',
+        '_stock': 'sum',
+        '_cost_t': 'sum'
+    }).reset_index()
+    
+    supplier_analysis.columns = ['supplier', 'products', 'stock', 'value']
+    supplier_analysis = supplier_analysis.sort_values('value', ascending=False)
+    
+    total_value = supplier_analysis['value'].sum()
+    
+    result = []
+    for _, row in supplier_analysis.head(15).iterrows():
+        if pd.notna(row['supplier']) and row['supplier'] != '':
+            result.append({
+                'supplier': row['supplier'],
                 'products': int(row['products']),
                 'stock': int(row['stock']),
                 'value': round(float(row['value']), 2),
