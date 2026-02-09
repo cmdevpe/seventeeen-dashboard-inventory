@@ -1010,7 +1010,6 @@
                             <th class="text-left py-2 px-2">Producto</th>
                             <th class="text-right py-2 px-2">Stock</th>
                             <th class="text-right py-2 px-2">Valor</th>
-                            <th class="text-center py-2 px-2">ABC</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
@@ -1025,9 +1024,6 @@
                                 </td>
                                 <td class="text-right py-2 px-2 text-slate-600">${formatNumber(item.stock)}</td>
                                 <td class="text-right py-2 px-2 text-[#0c4a6e] font-medium">${formatCurrency(item.value)}</td>
-                                <td class="text-center py-2 px-2">
-                                    <span class="px-2 py-0.5 rounded text-xs font-medium ${getABCClass(item.abc_class)}">${item.abc_class}</span>
-                                </td>
                             </tr>
                         `,
                           )
