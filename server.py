@@ -13,6 +13,10 @@ from datetime import datetime
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
 
+# Configuración para archivos grandes (250MB máximo)
+app.config['MAX_CONTENT_LENGTH'] = 250 * 1024 * 1024  # 250MB
+app.config['UPLOAD_FOLDER'] = '/tmp'  # Usar directorio temporal
+
 # ==================== CONSTANTS (DRY) ====================
 # Índices de columna Excel (O=14, P=15, Q=16, R=17)
 IDX_STOCK = 14   # Columna O - Stock
@@ -185,7 +189,7 @@ def health_check():
 
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
-    """Sube y procesa un archivo Excel"""
+    """Sube y procesa un archivo Excel (soporta archivos grandes hasta 250MB)"""
     global inventory_data, analysis_cache
     
     if 'file' not in request.files:
@@ -195,29 +199,69 @@ def upload_file():
     if file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
     
+    # Obtener tamaño del archivo
+    file.seek(0, 2)  # Ir al final
+    file_size = file.tell()
+    file.seek(0)  # Volver al inicio
+    file_size_mb = round(file_size / (1024 * 1024), 2)
+    
     try:
+        import tempfile
+        import gc
+        
+        # Guardar archivo temporalmente para procesamiento eficiente
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+            file.save(tmp_file.name)
+            tmp_path = tmp_file.name
+        
+        # Liberar memoria antes de procesar
+        gc.collect()
+        
         # Intentar diferentes configuraciones de lectura
+        df = None
         for skiprows in [0, 1, 2]:
             try:
-                df = pd.read_excel(file, skiprows=skiprows)
+                # Leer solo columnas necesarias si es posible
+                df = pd.read_excel(tmp_path, skiprows=skiprows, engine='openpyxl')
                 if 'Stock' in ' '.join(df.columns.astype(str)) or 'SKU' in ' '.join(df.columns.astype(str)):
-                    inventory_data = df
-                    inventory_data.columns = inventory_data.columns.str.strip()
-                    analysis_cache = None
                     break
-            except:
+                df = None
+            except Exception as e:
+                print(f"Intento con skiprows={skiprows} falló: {e}")
                 continue
         
-        if inventory_data is None:
-            return jsonify({'error': 'Could not parse Excel file'}), 400
+        # Limpiar archivo temporal
+        try:
+            os.unlink(tmp_path)
+        except:
+            pass
+        
+        if df is None:
+            return jsonify({'error': 'No se pudo parsear el archivo Excel. Verifica el formato.'}), 400
+        
+        # Procesar DataFrame
+        inventory_data = df
+        inventory_data.columns = inventory_data.columns.str.strip()
+        analysis_cache = None
+        
+        # Liberar memoria
+        gc.collect()
         
         return jsonify({
             'success': True,
-            'message': f'Cargados {len(inventory_data)} productos',
-            'columns': inventory_data.columns.tolist()
+            'message': f'Cargados {len(inventory_data):,} productos ({file_size_mb} MB)',
+            'columns': inventory_data.columns.tolist()[:10],  # Solo primeras 10 columnas
+            'total_rows': len(inventory_data),
+            'file_size_mb': file_size_mb
         })
+        
+    except MemoryError:
+        return jsonify({
+            'error': 'Archivo demasiado grande para la memoria disponible. Intenta con un archivo más pequeño o actualiza el plan de Render.'
+        }), 507
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Error procesando archivo: {e}")
+        return jsonify({'error': f'Error procesando archivo: {str(e)}'}), 500
 
 @app.route('/api/kpis')
 def get_kpis():
