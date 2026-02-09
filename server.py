@@ -199,6 +199,8 @@ def upload_file():
     if file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
     
+    global inventory_data, analysis_cache
+    
     # Obtener tamaño del archivo
     file.seek(0, 2)  # Ir al final
     file_size = file.tell()
@@ -219,11 +221,14 @@ def upload_file():
         
         # Intentar diferentes configuraciones de lectura
         df = None
-        for skiprows in [0, 1, 2]:
+        for skiprows in [1, 0, 2]:  # Priorizar skiprows=1 como el archivo por defecto
             try:
-                # Leer solo columnas necesarias si es posible
                 df = pd.read_excel(tmp_path, skiprows=skiprows, engine='openpyxl')
-                if 'Stock' in ' '.join(df.columns.astype(str)) or 'SKU' in ' '.join(df.columns.astype(str)):
+                df.columns = df.columns.astype(str).str.strip()
+                
+                # Verificar que tiene al menos 10 columnas (mínimo para el formato esperado)
+                if len(df.columns) >= 10 and len(df) > 0:
+                    print(f"✅ Archivo parseado con skiprows={skiprows}, {len(df)} filas, {len(df.columns)} columnas")
                     break
                 df = None
             except Exception as e:
@@ -241,7 +246,6 @@ def upload_file():
         
         # Procesar DataFrame
         inventory_data = df
-        inventory_data.columns = inventory_data.columns.str.strip()
         analysis_cache = None
         
         # Liberar memoria
