@@ -574,7 +574,7 @@ def search_products():
     query = request.args.get('q', '').lower()
     status = request.args.get('status', '')
     category = request.args.get('category', '')
-    abc = request.args.get('abc', '')
+    sort = request.args.get('sort', '')
     page = int(request.args.get('page', 1))
     limit = int(request.args.get('limit', 20))
     
@@ -597,16 +597,25 @@ def search_products():
     if category:
         mask &= (df[COL_CATEGORY].astype(str).str.lower() == category.lower())
     
-    if abc:
-        mask &= (df['abc_class'] == abc.upper())
+    filtered = df[mask]
+    
+    # Aplicar ordenamiento
+    if sort == 'date_desc' and 'F. Creación' in filtered.columns:
+        filtered = filtered.sort_values('F. Creación', ascending=False, na_position='last')
+    elif sort == 'date_asc' and 'F. Creación' in filtered.columns:
+        filtered = filtered.sort_values('F. Creación', ascending=True, na_position='last')
+    elif sort == 'value_desc':
+        filtered = filtered.sort_values('_cost_t', ascending=False)
+    elif sort == 'value_asc':
+        filtered = filtered.sort_values('_cost_t', ascending=True)
     
     # Paginación
-    total = int(mask.sum())
+    total = len(filtered)
     offset = (page - 1) * limit
-    filtered_df = df[mask].iloc[offset:offset + limit]
+    paginated_df = filtered.iloc[offset:offset + limit]
     
     # Usar helper DRY para convertir a dict
-    results = [product_to_dict(row, include_price=True) for _, row in filtered_df.iterrows()]
+    results = [product_to_dict(row, include_price=True) for _, row in paginated_df.iterrows()]
     
     return jsonify({
         'results': results,

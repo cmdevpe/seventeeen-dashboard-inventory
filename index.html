@@ -467,6 +467,16 @@
               <option value="50">50 por página</option>
               <option value="100">100 por página</option>
             </select>
+            <select
+              id="filter-sort"
+              class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 text-sm"
+            >
+              <option value="">Ordenar por</option>
+              <option value="date_desc">📅 Más recientes</option>
+              <option value="date_asc">📅 Más antiguos</option>
+              <option value="value_desc">💰 Mayor valor</option>
+              <option value="value_asc">💰 Menor valor</option>
+            </select>
             <button
               onclick="searchProducts(1)"
               class="px-5 py-2 bg-[#37b6fb] hover:bg-[#1da1e6] rounded-lg text-white font-medium text-sm"
@@ -1095,6 +1105,7 @@
         const query = document.getElementById("search-input").value;
         const category = document.getElementById("filter-category").value;
         const status = document.getElementById("filter-status").value;
+        const sort = document.getElementById("filter-sort").value;
         const limit = getItemsPerPage();
 
         try {
@@ -1102,6 +1113,7 @@
           if (query) params.append("q", query);
           if (category) params.append("category", category);
           if (status) params.append("status", status);
+          if (sort) params.append("sort", sort);
           params.append("page", page);
           params.append("limit", limit);
 
