@@ -610,7 +610,7 @@ def search_products():
             if s in ('date_desc', 'date_asc') and 'F. Creación' in filtered.columns:
                 if not added_fecha_dt:
                     filtered = filtered.copy()
-                    filtered['_fecha_dt'] = pd.to_datetime(filtered['F. Creación'], errors='coerce')
+                    filtered['_fecha_dt'] = pd.to_datetime(filtered['F. Creación'], dayfirst=True, errors='coerce')
                     added_fecha_dt = True
                 sort_columns.append('_fecha_dt')
                 sort_ascending.append(s == 'date_asc')
