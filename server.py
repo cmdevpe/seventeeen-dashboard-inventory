@@ -599,20 +599,34 @@ def search_products():
     
     filtered = df[mask]
     
-    # Aplicar ordenamiento
-    if sort in ('date_desc', 'date_asc') and 'F. Creación' in filtered.columns:
-        filtered = filtered.copy()
-        filtered['_fecha_dt'] = pd.to_datetime(filtered['F. Creación'], errors='coerce')
-        filtered = filtered.sort_values('_fecha_dt', ascending=(sort == 'date_asc'), na_position='last')
-        filtered = filtered.drop(columns=['_fecha_dt'])
-    elif sort == 'stock_desc':
-        filtered = filtered.sort_values('_stock', ascending=False)
-    elif sort == 'stock_asc':
-        filtered = filtered.sort_values('_stock', ascending=True)
-    elif sort == 'value_desc':
-        filtered = filtered.sort_values('_cost_t', ascending=False)
-    elif sort == 'value_asc':
-        filtered = filtered.sort_values('_cost_t', ascending=True)
+    # Aplicar ordenamiento (soporta multi-sort: "date_desc,stock_asc,value_desc")
+    if sort:
+        sort_parts = [s.strip() for s in sort.split(',') if s.strip()]
+        sort_columns = []
+        sort_ascending = []
+        added_fecha_dt = False
+        
+        for s in sort_parts:
+            if s in ('date_desc', 'date_asc') and 'F. Creación' in filtered.columns:
+                if not added_fecha_dt:
+                    filtered = filtered.copy()
+                    filtered['_fecha_dt'] = pd.to_datetime(filtered['F. Creación'], errors='coerce')
+                    added_fecha_dt = True
+                sort_columns.append('_fecha_dt')
+                sort_ascending.append(s == 'date_asc')
+            elif s in ('stock_desc', 'stock_asc'):
+                sort_columns.append('_stock')
+                sort_ascending.append(s == 'stock_asc')
+            elif s in ('value_desc', 'value_asc'):
+                sort_columns.append('_cost_t')
+                sort_ascending.append(s == 'value_asc')
+        
+        if sort_columns:
+            if not added_fecha_dt:
+                filtered = filtered.copy()
+            filtered = filtered.sort_values(sort_columns, ascending=sort_ascending, na_position='last')
+            if added_fecha_dt:
+                filtered = filtered.drop(columns=['_fecha_dt'])
     
     # Paginación
     total = len(filtered)

@@ -510,7 +510,7 @@
             <span class="text-xs text-slate-400 font-medium">Ordenar por:</span>
             <select
               id="sort-date"
-              onchange="clearOtherSorts(this)"
+              onchange="searchProducts(1)"
               class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 text-sm"
             >
               <option value="">Fecha</option>
@@ -519,7 +519,7 @@
             </select>
             <select
               id="sort-stock"
-              onchange="clearOtherSorts(this)"
+              onchange="searchProducts(1)"
               class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 text-sm"
             >
               <option value="">Stock</option>
@@ -528,7 +528,7 @@
             </select>
             <select
               id="sort-value"
-              onchange="clearOtherSorts(this)"
+              onchange="searchProducts(1)"
               class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 text-sm"
             >
               <option value="">Valor</option>
@@ -842,7 +842,7 @@
                     ${data
                       .map(
                         (item) => `
-                        <div class="stock-status-card text-center p-3 rounded-lg bg-slate-50 border-2 border-slate-200 cursor-pointer hover:shadow-md hover:border-[#38bdf8] transition-all"
+                        <div class="stock-status-card text-center p-3 rounded-lg bg-slate-50 border-2 border-slate-200 cursor-pointer hover:shadow-md hover:border-[#0c4a6e] hover:bg-sky-50 transition-all"
                              data-status="${item.status}"
                              onclick="filterByStatus('${item.status}')">
                             <div class="text-2xl mb-1">${item.icon}</div>
@@ -1138,13 +1138,16 @@
       // Pagination state
       let currentPage = 1;
 
-      // Clear other sort selects when one is changed
-      function clearOtherSorts(activeSelect) {
-        const sortIds = ["sort-date", "sort-stock", "sort-value"];
-        sortIds.forEach((id) => {
-          const el = document.getElementById(id);
-          if (el && el !== activeSelect) el.selectedIndex = 0;
-        });
+      // Build multi-sort string from all sort selects
+      function getActiveSorts() {
+        const sorts = [];
+        const dateSort = document.getElementById("sort-date").value;
+        const stockSort = document.getElementById("sort-stock").value;
+        const valueSort = document.getElementById("sort-value").value;
+        if (dateSort) sorts.push(dateSort);
+        if (stockSort) sorts.push(stockSort);
+        if (valueSort) sorts.push(valueSort);
+        return sorts.join(",");
       }
 
       // Get items per page from selector
@@ -1168,10 +1171,7 @@
         const query = document.getElementById("search-input").value;
         const category = document.getElementById("filter-category").value;
         const status = document.getElementById("filter-status").value;
-        const sort =
-          document.getElementById("sort-date").value ||
-          document.getElementById("sort-stock").value ||
-          document.getElementById("sort-value").value;
+        const sort = getActiveSorts();
         const limit = getItemsPerPage();
 
         try {
