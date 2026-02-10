@@ -500,16 +500,31 @@
               <option value="100">100 por página</option>
             </select>
             <select
-              id="filter-sort"
+              id="sort-date"
+              onchange="clearOtherSorts(this)"
               class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 text-sm"
             >
-              <option value="">Ordenar por</option>
-              <option value="date_desc">📅 Más recientes</option>
-              <option value="date_asc">📅 Más antiguos</option>
-              <option value="stock_desc">📦 Mayor stock</option>
-              <option value="stock_asc">📦 Menor stock</option>
-              <option value="value_desc">💰 Mayor valor</option>
-              <option value="value_asc">💰 Menor valor</option>
+              <option value="">📅 Fecha</option>
+              <option value="date_desc">Más recientes</option>
+              <option value="date_asc">Más antiguos</option>
+            </select>
+            <select
+              id="sort-stock"
+              onchange="clearOtherSorts(this)"
+              class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 text-sm"
+            >
+              <option value="">📦 Stock</option>
+              <option value="stock_desc">Mayor stock</option>
+              <option value="stock_asc">Menor stock</option>
+            </select>
+            <select
+              id="sort-value"
+              onchange="clearOtherSorts(this)"
+              class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 text-sm"
+            >
+              <option value="">💰 Valor</option>
+              <option value="value_desc">Mayor valor</option>
+              <option value="value_asc">Menor valor</option>
             </select>
             <button
               onclick="searchProducts(1)"
@@ -1119,6 +1134,15 @@
       // Pagination state
       let currentPage = 1;
 
+      // Clear other sort selects when one is changed
+      function clearOtherSorts(activeSelect) {
+        const sortIds = ["sort-date", "sort-stock", "sort-value"];
+        sortIds.forEach((id) => {
+          const el = document.getElementById(id);
+          if (el && el !== activeSelect) el.selectedIndex = 0;
+        });
+      }
+
       // Get items per page from selector
       function getItemsPerPage() {
         const select = document.getElementById("items-per-page");
@@ -1140,7 +1164,10 @@
         const query = document.getElementById("search-input").value;
         const category = document.getElementById("filter-category").value;
         const status = document.getElementById("filter-status").value;
-        const sort = document.getElementById("filter-sort").value;
+        const sort =
+          document.getElementById("sort-date").value ||
+          document.getElementById("sort-stock").value ||
+          document.getElementById("sort-value").value;
         const limit = getItemsPerPage();
 
         try {
