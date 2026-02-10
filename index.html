@@ -842,7 +842,8 @@
                     ${data
                       .map(
                         (item) => `
-                        <div class="text-center p-3 rounded-lg bg-slate-50 border border-slate-200 cursor-pointer"
+                        <div class="stock-status-card text-center p-3 rounded-lg bg-slate-50 border-2 border-slate-200 cursor-pointer hover:shadow-md hover:border-[#38bdf8] transition-all"
+                             data-status="${item.status}"
                              onclick="filterByStatus('${item.status}')">
                             <div class="text-2xl mb-1">${item.icon}</div>
                             <p class="text-xl font-semibold text-[#0c4a6e]">${formatNumber(item.count)}</p>
@@ -1290,7 +1291,23 @@
 
       // Filter by status
       function filterByStatus(status) {
-        document.getElementById("filter-status").value = status;
+        const select = document.getElementById("filter-status");
+        // Toggle: si ya está seleccionado, deseleccionar
+        if (select.value === status) {
+          select.value = "";
+        } else {
+          select.value = status;
+        }
+        // Resaltar tarjeta activa
+        document.querySelectorAll(".stock-status-card").forEach((card) => {
+          if (card.dataset.status === select.value) {
+            card.classList.add("border-[#0c4a6e]", "bg-sky-50", "shadow-md");
+            card.classList.remove("border-slate-200", "bg-slate-50");
+          } else {
+            card.classList.remove("border-[#0c4a6e]", "bg-sky-50", "shadow-md");
+            card.classList.add("border-slate-200", "bg-slate-50");
+          }
+        });
         searchProducts();
       }
 
