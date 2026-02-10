@@ -499,6 +499,15 @@
               <option value="50">50 por página</option>
               <option value="100">100 por página</option>
             </select>
+            <button
+              onclick="searchProducts(1)"
+              class="px-5 py-2 bg-[#37b6fb] hover:bg-[#1da1e6] rounded-lg text-white font-medium text-sm"
+            >
+              Buscar
+            </button>
+          </div>
+          <div class="flex flex-wrap gap-3 mb-4 items-center">
+            <span class="text-xs text-slate-400 font-medium">Ordenar por:</span>
             <select
               id="sort-date"
               onchange="clearOtherSorts(this)"
@@ -526,12 +535,6 @@
               <option value="value_desc">Mayor valor</option>
               <option value="value_asc">Menor valor</option>
             </select>
-            <button
-              onclick="searchProducts(1)"
-              class="px-5 py-2 bg-[#37b6fb] hover:bg-[#1da1e6] rounded-lg text-white font-medium text-sm"
-            >
-              Buscar
-            </button>
           </div>
           <div id="search-results" class="overflow-x-auto"></div>
           <div
