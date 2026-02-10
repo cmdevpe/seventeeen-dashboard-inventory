@@ -605,6 +605,10 @@ def search_products():
         filtered['_fecha_dt'] = pd.to_datetime(filtered['F. Creación'], errors='coerce')
         filtered = filtered.sort_values('_fecha_dt', ascending=(sort == 'date_asc'), na_position='last')
         filtered = filtered.drop(columns=['_fecha_dt'])
+    elif sort == 'stock_desc':
+        filtered = filtered.sort_values('_stock', ascending=False)
+    elif sort == 'stock_asc':
+        filtered = filtered.sort_values('_stock', ascending=True)
     elif sort == 'value_desc':
         filtered = filtered.sort_values('_cost_t', ascending=False)
     elif sort == 'value_asc':
