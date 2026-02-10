@@ -842,7 +842,7 @@
                     ${data
                       .map(
                         (item) => `
-                        <div class="stock-status-card text-center p-3 rounded-lg bg-slate-50 border-2 border-slate-200 cursor-pointer hover:shadow-md hover:border-[#0c4a6e] hover:bg-sky-50 transition-all"
+                        <div class="stock-status-card text-center p-3 rounded-lg bg-slate-50 border-2 border-slate-200 cursor-pointer hover:shadow-md hover:border-[#38bdf8] hover:bg-sky-50 transition-all"
                              data-status="${item.status}"
                              onclick="filterByStatus('${item.status}')">
                             <div class="text-2xl mb-1">${item.icon}</div>
@@ -1301,10 +1301,10 @@
         // Resaltar tarjeta activa
         document.querySelectorAll(".stock-status-card").forEach((card) => {
           if (card.dataset.status === select.value) {
-            card.classList.add("border-[#0c4a6e]", "bg-sky-50", "shadow-md");
+            card.classList.add("border-[#38bdf8]", "bg-sky-50", "shadow-md");
             card.classList.remove("border-slate-200", "bg-slate-50");
           } else {
-            card.classList.remove("border-[#0c4a6e]", "bg-sky-50", "shadow-md");
+            card.classList.remove("border-[#38bdf8]", "bg-sky-50", "shadow-md");
             card.classList.add("border-slate-200", "bg-slate-50");
           }
         });
