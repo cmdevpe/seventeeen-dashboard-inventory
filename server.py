@@ -3,15 +3,17 @@
 IMPORTACIONES SEVENTEEN PERÚ
 """
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, session
 from flask_cors import CORS
 import pandas as pd
 import numpy as np
 import os
+import uuid
 from datetime import datetime
 
 app = Flask(__name__, static_folder='.', static_url_path='')
-CORS(app)
+app.secret_key = 'seventeen_secret_key_2024'  # Necesario para sesiones
+CORS(app, supports_credentials=True)
 
 # Configuración para archivos grandes (250MB máximo)
 app.config['MAX_CONTENT_LENGTH'] = 250 * 1024 * 1024  # 250MB
@@ -31,13 +33,35 @@ COL_PRODUCT = 'Producto'
 COL_SKU = 'SKU'
 COL_ID = 'ID'
 
-# Estado global
-inventory_data = None
-analysis_cache = None
+# Almacenamiento por sesión
+# Estructura: session_id -> { 'inventory_data': df, 'analysis_cache': df, 'metadata': {...} }
+SESSIONS = {}
+
+def get_user_session():
+    """Obtiene o crea el ID de sesión del usuario"""
+    if 'user_id' not in session:
+        session['user_id'] = str(uuid.uuid4())
+    
+    user_id = session['user_id']
+    if user_id not in SESSIONS:
+        SESSIONS[user_id] = {
+            'inventory_data': None,
+            'analysis_cache': None,
+            'metadata': {
+                'store_name': 'Sin datos',
+                'upload_date': '-'
+            }
+        }
+    return SESSIONS[user_id]
 
 def load_default_inventory():
-    """Carga el archivo de inventario por defecto"""
-    global inventory_data, analysis_cache
+    """Carga el archivo de inventario por defecto para LA SESIÓN ACTUAL"""
+    user_data = get_user_session()
+    
+    # Si ya tiene datos, no recargar por defecto (opcional, pero mejor para persistencia)
+    if user_data['inventory_data'] is not None:
+        return True
+
     default_file = 'inventario.xlsx'
     if os.path.exists(default_file):
         try:
@@ -53,8 +77,14 @@ def load_default_inventory():
             print(f"   Q (idx {IDX_COST_T}): '{cols[IDX_COST_T]}'")
             print(f"   R (idx {IDX_PRICE}): '{cols[IDX_PRICE]}'")
             
-            analysis_cache = None
-            print(f"✅ Cargado inventario: {len(inventory_data)} productos")
+            user_data['inventory_data'] = inventory_data
+            user_data['analysis_cache'] = None
+            user_data['metadata'] = {
+                'store_name': 'Inventario General',
+                'upload_date': datetime.now().strftime("%d/%m/%Y %H:%M")
+            }
+            
+            print(f"✅ Cargado inventario por defecto para usuario {session['user_id']}")
             return True
         except Exception as e:
             print(f"❌ Error cargando inventario: {e}")
@@ -62,6 +92,12 @@ def load_default_inventory():
     return False
 
 # Funciones helper para acceder a columnas por índice
+@app.route('/api/metadata')
+def get_metadata():
+    """Retorna metadatos del archivo cargado"""
+    user_data = get_user_session()
+    return jsonify(user_data['metadata'])
+
 def get_stock(df):
     """Obtiene la columna Stock (O)"""
     return pd.to_numeric(df.iloc[:, IDX_STOCK], errors='coerce').fillna(0)
@@ -80,15 +116,18 @@ def get_price(df):
 
 def get_analysis():
     """Genera el análisis completo del inventario (Single Responsibility)"""
-    global analysis_cache
+    user_data = get_user_session()
     
-    if inventory_data is None:
-        return None
+    # Intentar cargar default si está vacío
+    if user_data['inventory_data'] is None:
+        load_default_inventory()
+        if user_data['inventory_data'] is None:
+            return None
+            
+    if user_data['analysis_cache'] is not None:
+        return user_data['analysis_cache']
     
-    if analysis_cache is not None:
-        return analysis_cache
-    
-    df = inventory_data.copy()
+    df = user_data['inventory_data'].copy()
     
     # Agregar columnas calculadas usando índices (O, P, Q, R)
     df['_stock'] = get_stock(df)
@@ -106,7 +145,10 @@ def get_analysis():
     df['margin'] = df['_price'] - df['_cost_u']
     df['margin_pct'] = np.where(df['_price'] > 0, (df['margin'] / df['_price'] * 100), 0)
     
-    analysis_cache = df
+    df['margin'] = df['_price'] - df['_cost_u']
+    df['margin_pct'] = np.where(df['_price'] > 0, (df['margin'] / df['_price'] * 100), 0)
+    
+    user_data['analysis_cache'] = df
     return df
 
 # ==================== HELPERS (DRY) ====================
@@ -166,23 +208,32 @@ def product_to_dict(row, include_price=False):
 
 def check_data_loaded():
     """Verifica si hay datos cargados"""
-    if inventory_data is None:
-        return jsonify({'error': 'No data loaded'}), 400
+    user_data = get_user_session()
+    if user_data['inventory_data'] is None:
+        # Intentar cargar default
+        load_default_inventory()
+        if user_data['inventory_data'] is None:
+            return jsonify({'error': 'No data loaded'}), 400
     return None
 
 # ==================== ENDPOINTS ====================
 
 @app.route('/')
 def serve_index():
-    """Sirve el dashboard HTML"""
+    """Sirve el dashboard HTML e inicializa la sesión"""
+    # Asegurar que la sesión existe al cargar la página
+    get_user_session()
     return send_from_directory('.', 'index.html')
 
 @app.route('/api/health')
 def health_check():
     """Health check endpoint"""
+    user_data = get_user_session()
+    inventory_data = user_data['inventory_data']
     return jsonify({
         'status': 'ok',
         'timestamp': datetime.now().isoformat(),
+        'session_id': session.get('user_id'),
         'data_loaded': inventory_data is not None,
         'total_products': len(inventory_data) if inventory_data is not None else 0
     })
@@ -190,7 +241,7 @@ def health_check():
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
     """Sube y procesa un archivo Excel (soporta archivos grandes hasta 250MB)"""
-    global inventory_data, analysis_cache
+    user_data = get_user_session()
     
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
@@ -199,7 +250,9 @@ def upload_file():
     if file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
     
-    global inventory_data, analysis_cache
+    # Extraer nombre de la tienda del archivo (sin extensión)
+    filename = file.filename
+    store_name = os.path.splitext(filename)[0]
     
     # Obtener tamaño del archivo
     file.seek(0, 2)  # Ir al final
@@ -247,6 +300,12 @@ def upload_file():
         # Procesar DataFrame
         inventory_data = df
         analysis_cache = None
+        
+        # Actualizar metadatos
+        store_metadata = {
+            'store_name': store_name,
+            'upload_date': datetime.now().strftime("%d/%m/%Y %H:%M")
+        }
         
         # Liberar memoria
         gc.collect()
@@ -319,10 +378,9 @@ def get_kpis():
 @app.route('/api/stock-status')
 def get_stock_status():
     """Retorna la distribución de productos por estado de stock"""
-    if inventory_data is None:
-        return jsonify({'error': 'No data loaded'}), 400
-    
     df = get_analysis()
+    if df is None:
+        return jsonify({'error': 'No data loaded'}), 400
     
     status_counts = df['stock_status'].value_counts().to_dict()
     
@@ -356,10 +414,11 @@ def get_stock_status():
 @app.route('/api/abc-analysis')
 def get_abc_analysis():
     """Retorna el análisis ABC del inventario"""
-    if inventory_data is None:
+    df = get_analysis()
+    if df is None:
         return jsonify({'error': 'No data loaded'}), 400
     
-    df = get_analysis()
+    # df ya tiene la clasificación ABC aplicada en get_analysis()
     abc_summary = df.groupby('abc_class').agg({
         'ID': 'count',
         '_cost_t': 'sum'
@@ -391,10 +450,9 @@ def get_abc_analysis():
 @app.route('/api/categories')
 def get_categories():
     """Retorna el análisis por categoría"""
-    if inventory_data is None:
-        return jsonify({'error': 'No data loaded'}), 400
-    
     df = get_analysis()
+    if df is None:
+        return jsonify({'error': 'No data loaded'}), 400
     
     if COL_CATEGORY not in df.columns:
         return jsonify({'error': 'Category column not found'}), 400
@@ -425,10 +483,9 @@ def get_categories():
 @app.route('/api/brands')
 def get_brands():
     """Retorna el análisis por marca"""
-    if inventory_data is None:
-        return jsonify({'error': 'No data loaded'}), 400
-    
     df = get_analysis()
+    if df is None:
+        return jsonify({'error': 'No data loaded'}), 400
     
     if COL_BRAND not in df.columns:
         return jsonify({'error': 'Brand column not found'}), 400
@@ -456,13 +513,48 @@ def get_brands():
     
     return jsonify(result)
 
+@app.route('/api/unique-brands')
+def get_unique_brands():
+    """Retorna lista de marcas únicas, opcionalmente filtradas por categoría"""
+    df = get_analysis()
+    if df is None:
+        return jsonify({'error': 'No data loaded'}), 400
+    
+    category = request.args.get('category')
+    
+    # Filtrar por categoría (case insensitive)
+    if category:
+        df = df[df[COL_CATEGORY].astype(str).str.lower() == category.lower()]
+    
+    if COL_BRAND not in df.columns:
+        return jsonify([])
+    
+    # Obtener valores únicos
+    unique_brands = df[COL_BRAND].unique()
+    
+    cleaned_brands = []
+    
+    for b in unique_brands:
+        s = str(b).strip()
+        if pd.isna(b) or s == '' or s.lower() == 'nan':
+            continue
+        cleaned_brands.append(s)
+    
+    cleaned_brands = sorted(list(set(cleaned_brands)))
+    
+    # Verificar si hay productos sin marca para añadir la opción "SIN_MARCA"
+    mask_no_brand = df[COL_BRAND].isna() | (df[COL_BRAND].astype(str).str.strip() == '') | (df[COL_BRAND].astype(str).str.lower() == 'nan')
+    if mask_no_brand.any():
+        cleaned_brands.append('SIN_MARCA')
+
+    return jsonify(cleaned_brands)
+
 @app.route('/api/suppliers')
 def get_suppliers():
     """Retorna el análisis por proveedor"""
-    if inventory_data is None:
-        return jsonify({'error': 'No data loaded'}), 400
-    
     df = get_analysis()
+    if df is None:
+        return jsonify({'error': 'No data loaded'}), 400
     
     # Columna de proveedor
     COL_SUPPLIER = 'Proveedor'
@@ -496,10 +588,9 @@ def get_suppliers():
 @app.route('/api/alerts')
 def get_alerts():
     """Retorna los productos en estado de alerta"""
-    if inventory_data is None:
-        return jsonify({'error': 'No data loaded'}), 400
-    
     df = get_analysis()
+    if df is None:
+        return jsonify({'error': 'No data loaded'}), 400
     
     # Filtrar productos en alerta
     alerts_df = df[df['stock_status'].isin(['negative', 'out_of_stock', 'critical'])].copy()
@@ -529,10 +620,9 @@ def get_alerts():
 @app.route('/api/top-products')
 def get_top_products():
     """Retorna los productos con mayor valor de inventario"""
-    if inventory_data is None:
-        return jsonify({'error': 'No data loaded'}), 400
-    
     df = get_analysis()
+    if df is None:
+        return jsonify({'error': 'No data loaded'}), 400
     
     top_df = df[df['_stock'] > 0].sort_values('_cost_t', ascending=False).head(20)
     
@@ -553,7 +643,8 @@ def get_top_products():
 @app.route('/api/analysis')
 def get_full_analysis():
     """Retorna el análisis completo"""
-    if inventory_data is None:
+    df = get_analysis()
+    if df is None:
         return jsonify({'error': 'No data loaded'}), 400
     
     return jsonify({
@@ -596,6 +687,12 @@ def search_products():
     
     if category:
         mask &= (df[COL_CATEGORY].astype(str).str.lower() == category.lower())
+
+    if brand:
+        if brand == 'SIN_MARCA':
+             mask &= (df[COL_BRAND].isna() | (df[COL_BRAND].astype(str).str.strip() == '') | (df[COL_BRAND].astype(str).str.lower() == 'nan'))
+        else:
+             mask &= (df[COL_BRAND].astype(str).str.lower() == brand.lower())
     
     filtered = df[mask]
     

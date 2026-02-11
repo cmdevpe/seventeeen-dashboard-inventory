@@ -302,7 +302,47 @@
   </head>
   <body class="text-slate-700">
     <!-- Header (loaded from partial) -->
-    <div id="header-placeholder"></div>
+    <!-- Header -->
+    <nav
+      class="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between sticky top-0 z-40 shadow-sm"
+    >
+      <div class="flex items-center gap-3">
+        <div
+          class="w-8 h-8 rounded-lg bg-gradient-to-br from-[#0c4a6e] to-[#0284c7] flex items-center justify-center text-white font-bold shadow-sm"
+        >
+          S
+        </div>
+        <div>
+          <h1
+            class="text-lg font-bold text-[#0c4a6e] leading-tight flex items-center gap-2"
+          >
+            Seventeen Dashboard
+            <span
+              class="text-[10px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 font-medium tracking-wide uppercase"
+              >v2.1</span
+            >
+          </h1>
+          <div
+            id="store-metadata"
+            class="text-xs text-slate-500 flex items-center gap-2 hidden mt-0.5 transition-all"
+          >
+            <i class="fa-solid fa-store text-[10px]"></i>
+            <span id="store-name" class="font-medium text-slate-700"></span>
+            <span class="w-1 h-1 rounded-full bg-slate-300"></span>
+            <i class="fa-regular fa-clock text-[10px]"></i>
+            <span id="upload-date"></span>
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center gap-4">
+        <button
+          onclick="document.querySelector('input[type=file]').click()"
+          class="text-sm text-slate-500 hover:text-[#0c4a6e] font-medium transition-colors flex items-center gap-2"
+        >
+          <i class="fa-solid fa-upload"></i> Subir nuevo
+        </button>
+      </div>
+    </nav>
 
     <!-- Upload Progress Modal -->
     <div id="upload-modal" class="modal-overlay hidden">
@@ -473,10 +513,20 @@
             />
             <select
               id="filter-category"
-              onchange="searchProducts(1)"
+              onchange="
+                populateBrandFilter();
+                searchProducts(1);
+              "
               class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 text-sm"
             >
               <option value="">Todas las categorías</option>
+            </select>
+            <select
+              id="filter-brand"
+              onchange="searchProducts(1)"
+              class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 text-sm max-w-[200px]"
+            >
+              <option value="">Todas las marcas</option>
             </select>
             <select
               id="filter-status"
@@ -715,6 +765,7 @@
             brandsRes,
             topProductsRes,
             alertsRes,
+            metadataRes,
           ] = await Promise.all([
             fetch(`${API_URL}/kpis`),
             fetch(`${API_URL}/stock-status`),
@@ -723,6 +774,7 @@
             fetch(`${API_URL}/brands`),
             fetch(`${API_URL}/top-products`),
             fetch(`${API_URL}/alerts`),
+            fetch(`${API_URL}/metadata`),
           ]);
 
           if (!kpisRes.ok) throw new Error("API not available");
@@ -734,6 +786,18 @@
           const brands = await brandsRes.json();
           const topProducts = await topProductsRes.json();
           const alerts = await alertsRes.json();
+          const metadata = await metadataRes.json();
+
+          // Update header metadata
+          if (metadata && metadata.store_name) {
+            document.getElementById("store-name").textContent =
+              metadata.store_name;
+            document.getElementById("upload-date").textContent =
+              metadata.upload_date;
+            document
+              .getElementById("store-metadata")
+              .classList.remove("hidden");
+          }
 
           renderKPIs(kpis);
           renderStockStatus(stockStatus);
@@ -1168,11 +1232,52 @@
         });
       }
 
+      // Populate brand filter (dependent on category)
+      async function populateBrandFilter() {
+        const category = document.getElementById("filter-category").value;
+        const select = document.getElementById("filter-brand");
+
+        try {
+          let url = `${API_URL}/unique-brands`;
+          if (category) {
+            url += `?category=${encodeURIComponent(category)}`;
+          }
+
+          const response = await fetch(url);
+          const brands = await response.json();
+
+          // Guardar selección actual si existe y es válida para la nueva lista
+          const currentSelection = select.value;
+
+          select.innerHTML = '<option value="">Todas las marcas</option>';
+          brands.forEach((brand) => {
+            const value = brand === "SIN_MARCA" ? "SIN_MARCA" : brand;
+            const text = brand === "SIN_MARCA" ? "🚫 Sin Marca" : brand;
+            select.innerHTML += `<option value="${value}">${text}</option>`;
+          });
+
+          // Restaurar selección si es posible, sino resetear
+          if (
+            currentSelection &&
+            (brands.includes(currentSelection) ||
+              (currentSelection === "SIN_MARCA" &&
+                brands.includes("SIN_MARCA")))
+          ) {
+            select.value = currentSelection;
+          } else {
+            select.value = "";
+          }
+        } catch (error) {
+          console.error("Error loading brands:", error);
+        }
+      }
+
       // Search Products with pagination
       async function searchProducts(page = 1) {
         currentPage = page;
         const query = document.getElementById("search-input").value;
         const category = document.getElementById("filter-category").value;
+        const brand = document.getElementById("filter-brand").value;
         const status = document.getElementById("filter-status").value;
         const sort = getActiveSorts();
         const limit = getItemsPerPage();
@@ -1181,6 +1286,7 @@
           const params = new URLSearchParams();
           if (query) params.append("q", query);
           if (category) params.append("category", category);
+          if (brand) params.append("brand", brand);
           if (status) params.append("status", status);
           if (sort) params.append("sort", sort);
           params.append("page", page);
@@ -1277,9 +1383,11 @@
                             <tr class="hover:bg-slate-50">
                                 <td class="py-2 px-3 text-slate-500 text-xs">${item.created_at || "-"}</td>
                                 <td class="py-2 px-3 text-slate-500 font-mono text-xs">${item.sku}</td>
-                                <td class="py-2 px-3 text-slate-700 truncate max-w-[200px]" title="${item.product}">${item.product}</td>
+                                <td class="py-2 px-3 text-slate-700" title="${item.product}">${item.product}</td>
                                 <td class="py-2 px-3 text-slate-500">${item.category}</td>
-                                <td class="py-2 px-3 text-slate-500">${item.brand}</td>
+                                <td class="py-2 px-3 text-slate-500">
+                                    ${item.brand ? item.brand : '<span class="px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200">Sin Marca</span>'}
+                                </td>
                                 <td class="py-2 px-3 text-right ${item.stock < 0 ? "text-red-500" : "text-slate-600"} font-mono">${formatNumber(item.stock)}</td>
                                 <td class="py-2 px-3 text-right text-[#0c4a6e] font-medium">${formatCurrency(item.value)}</td>
                                 <td class="py-2 px-3 text-center">${getStatusBadge(item.status)}</td>
