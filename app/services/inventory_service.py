@@ -127,7 +127,7 @@ class InventoryService:
         result = {
             'id': int(row[COL_ID]) if pd.notna(row[COL_ID]) else 0,
             'sku': str(row.get(COL_SKU, '')),
-            'product': str(row.get(COL_PRODUCT, ''))[:50],
+            'product': str(row.get(COL_PRODUCT, '')),
             'category': str(row.get(COL_CATEGORY, '')),
             'brand': str(row.get(COL_BRAND, '')),
             'stock': int(row['_stock']),

@@ -709,7 +709,7 @@ function renderSearchResults(data) {
           <tr class="hover:bg-slate-50">
             <td class="py-2 px-3 text-slate-500 text-xs">${item.created_at || "-"}</td>
             <td class="py-2 px-3 text-slate-500 font-mono text-xs">${item.sku}</td>
-            <td class="py-2 px-3 text-slate-700 truncate max-w-[200px]" title="${item.product}">${item.product}</td>
+            <td class="py-2 px-3 text-slate-700">${item.product}</td>
             <td class="py-2 px-3 text-slate-500">${item.category}</td>
             <td class="py-2 px-3">${getBrandBadge(item.brand)}</td>
             <td class="py-2 px-3 text-right ${item.stock < 0 ? "text-red-500" : "text-slate-600"} font-mono">${formatNumber(item.stock)}</td>
