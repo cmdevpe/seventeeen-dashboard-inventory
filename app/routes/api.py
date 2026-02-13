@@ -7,6 +7,12 @@ import numpy as np
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
+@api_bp.errorhandler(Exception)
+def handle_api_error(e):
+    """Captura excepciones no manejadas en endpoints de API."""
+    print(f"API Error: {type(e).__name__}: {e}")
+    return jsonify({'error': f'Error interno: {str(e)}'}), 500
+
 def check_data_loaded():
     """Helper para verificar datos."""
     if 'user_id' not in session:
@@ -61,9 +67,15 @@ def upload_file():
     
     try:
         rows, cols_or_error = InventoryService.process_app_upload(file, file.filename)
-        
+
         if rows is None:
              return jsonify({'error': cols_or_error}), 400
+
+        # Pre-computar análisis para evitar race condition en peticiones paralelas
+        try:
+            InventoryService.get_analysis()
+        except Exception as e:
+            print(f"Warning: pre-analysis failed: {e}")
 
         return jsonify({
             'success': True,
@@ -98,7 +110,8 @@ def get_kpis():
     
     df_negative = df[df['_stock'] < 0]
     
-    avg_margin = float(df[df['margin_pct'] > 0]['margin_pct'].mean()) if 'margin_pct' in df.columns else 0
+    avg_margin_raw = df[df['margin_pct'] > 0]['margin_pct'].mean() if 'margin_pct' in df.columns else 0
+    avg_margin = float(avg_margin_raw) if pd.notna(avg_margin_raw) else 0
     
     return jsonify({
         'total_skus': total_skus,
@@ -123,6 +136,8 @@ def get_kpis():
 
 @api_bp.route('/stock-status')
 def get_stock_status():
+    error = check_data_loaded()
+    if error: return error
     df = InventoryService.get_analysis()
     if df is None: return jsonify({'error': 'No data loaded'}), 400
     
@@ -173,13 +188,11 @@ def search_products():
     mask = pd.Series([True] * len(df))
     
     if query:
-        # Optimización: crear string único para búsqueda? No, demasiado memoria.
-        # Mantener filtros individuales
         mask &= (
-            df[COL_PRODUCT].astype(str).str.lower().str.contains(query, na=False) |
-            df[COL_SKU].astype(str).str.lower().str.contains(query, na=False) |
-            df[COL_CATEGORY].astype(str).str.lower().str.contains(query, na=False) |
-            df[COL_BRAND].astype(str).str.lower().str.contains(query, na=False)
+            df[COL_PRODUCT].astype(str).str.lower().str.contains(query, na=False, regex=False) |
+            df[COL_SKU].astype(str).str.lower().str.contains(query, na=False, regex=False) |
+            df[COL_CATEGORY].astype(str).str.lower().str.contains(query, na=False, regex=False) |
+            df[COL_BRAND].astype(str).str.lower().str.contains(query, na=False, regex=False)
         )
     
     if status:

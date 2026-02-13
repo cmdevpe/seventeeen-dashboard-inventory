@@ -94,14 +94,18 @@ async function uploadExcel(event) {
 
       // Stage 3: Loading dashboard (70-100%)
       updateUploadProgress(80, "Actualizando dashboard...", "Cargando datos...");
-      await loadData();
-      updateUploadProgress(100, "¡Completado!");
+      const loadSuccess = await loadData();
 
-      // Close modal after success
-      setTimeout(() => {
+      if (loadSuccess) {
+        updateUploadProgress(100, "¡Completado!");
+        setTimeout(() => {
+          hideUploadModal();
+          updateStatus(true, data.message);
+        }, 500);
+      } else {
         hideUploadModal();
-        updateStatus(true, data.message);
-      }, 500);
+        updateStatus(false, "Datos subidos pero error al procesar");
+      }
     } else {
       hideUploadModal();
       updateStatus(false, data.error || "Error al cargar");
@@ -122,6 +126,10 @@ async function loadData() {
   try {
     document.getElementById("empty-state").classList.add("hidden");
     document.getElementById("loading-state").classList.remove("hidden");
+    document.getElementById("loading-state").innerHTML = `
+      <div class="loader mb-4"></div>
+      <p class="text-slate-500">Cargando análisis de inventario...</p>
+    `;
     document.getElementById("dashboard-content").classList.add("hidden");
 
     const [
@@ -144,9 +152,12 @@ async function loadData() {
       fetch(`${API_URL}/metadata`, { credentials: "include" }),
     ]);
 
-    if (!kpisRes.ok) {
-      const errData = await kpisRes.json().catch(() => ({}));
-      console.error("KPIs API error:", kpisRes.status, errData);
+    // Verificar que TODAS las respuestas sean exitosas
+    const allResponses = [kpisRes, stockStatusRes, suppliersRes, categoriesRes, brandsRes, topProductsRes, alertsRes, metadataRes];
+    const failedRes = allResponses.find(r => !r.ok);
+    if (failedRes) {
+      const errData = await failedRes.json().catch(() => ({}));
+      console.error("API error:", failedRes.url, failedRes.status, errData);
       throw new Error(errData.error || "API not available");
     }
 
@@ -187,19 +198,21 @@ async function loadData() {
 
     // Initial search
     searchProducts(1);
+    return true;
   } catch (error) {
     console.error("Error loading data:", error);
-    updateStatus(false, "Error de conexión");
+    updateStatus(false, "Error al cargar datos");
     document.getElementById("loading-state").innerHTML = `
       <div class="text-center">
         <div class="text-6xl mb-4">⚠️</div>
-        <h3 class="text-xl font-semibold text-gray-300 mb-2">No se pudo conectar al servidor</h3>
-        <p class="text-slate-500 mb-4">Asegúrate de que el servidor Flask esté ejecutándose</p>
+        <h3 class="text-xl font-semibold text-gray-300 mb-2">No se pudo cargar los datos</h3>
+        <p class="text-slate-500 mb-4">${error.message || 'Error de conexión con el servidor'}</p>
         <button onclick="loadData()" class="px-6 py-2 bg-[#0c4a6e] hover:bg-[#0a3d5c] rounded-lg text-white font-medium">
           Reintentar
         </button>
       </div>
     `;
+    return false;
   }
 }
 

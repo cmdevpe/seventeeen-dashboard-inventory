@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import os
 import uuid
+import threading
 from datetime import datetime
 from flask import session
 from app.utils.constants import *
@@ -9,6 +10,7 @@ from app.utils.constants import *
 # Almacenamiento en memoria (simulado)
 # Estructura: session_id -> { 'inventory_data': df, 'analysis_cache': df, 'metadata': {...} }
 SESSIONS = {}
+_analysis_lock = threading.Lock()
 
 class InventoryService:
     @staticmethod
@@ -59,37 +61,42 @@ class InventoryService:
 
     @staticmethod
     def get_analysis():
-        """Genera el análisis completo del inventario (Lazy Loading)."""
+        """Genera el análisis completo del inventario (Lazy Loading, thread-safe)."""
         user_data = InventoryService.get_user_session()
-        
+
         # Intentar cargar default si está vacío
         if user_data['inventory_data'] is None:
             InventoryService.load_default_inventory()
             if user_data['inventory_data'] is None:
                 return None
-                
+
         if user_data['analysis_cache'] is not None:
             return user_data['analysis_cache']
-        
-        df = user_data['inventory_data'].copy()
-        
-        # Helpers seguros para columnas
-        def get_col(idx):
-             return pd.to_numeric(df.iloc[:, idx], errors='coerce').fillna(0)
 
-        df['_stock'] = get_col(IDX_STOCK)
-        df['_cost_u'] = get_col(IDX_COST_U)
-        df['_cost_t'] = get_col(IDX_COST_T)
-        df['_price'] = get_col(IDX_PRICE)
-        
-        df['stock_status'] = df['_stock'].apply(InventoryService._classify_stock_status)
-        df = InventoryService._apply_abc_classification(df)
-        
-        df['margin'] = df['_price'] - df['_cost_u']
-        df['margin_pct'] = np.where(df['_price'] > 0, (df['margin'] / df['_price'] * 100), 0)
-        
-        user_data['analysis_cache'] = df
-        return df
+        with _analysis_lock:
+            # Double-check después de adquirir el lock
+            if user_data['analysis_cache'] is not None:
+                return user_data['analysis_cache']
+
+            df = user_data['inventory_data'].copy()
+
+            # Helpers seguros para columnas
+            def get_col(idx):
+                 return pd.to_numeric(df.iloc[:, idx], errors='coerce').fillna(0)
+
+            df['_stock'] = get_col(IDX_STOCK)
+            df['_cost_u'] = get_col(IDX_COST_U)
+            df['_cost_t'] = get_col(IDX_COST_T)
+            df['_price'] = get_col(IDX_PRICE)
+
+            df['stock_status'] = df['_stock'].apply(InventoryService._classify_stock_status)
+            df = InventoryService._apply_abc_classification(df)
+
+            df['margin'] = df['_price'] - df['_cost_u']
+            df['margin_pct'] = np.where(df['_price'] > 0, (df['margin'] / df['_price'] * 100), 0)
+
+            user_data['analysis_cache'] = df
+            return df
 
     @staticmethod
     def _classify_stock_status(stock):
