@@ -3,3 +3,11 @@ __pycache__/
 venv/
 .claude/
 *.xlsx
+*.xls
+_cookies.txt
+_test.*
+reproduce_issue.py
+validate_backend_response.py
+image.png
+image copy.png
+nul
