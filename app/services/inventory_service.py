@@ -82,7 +82,25 @@ class InventoryService:
 
             # Helpers seguros para columnas
             def get_col(idx):
-                 return pd.to_numeric(df.iloc[:, idx], errors='coerce').fillna(0)
+                 s = pd.to_numeric(df.iloc[:, idx], errors='coerce').fillna(0)
+                 return s.replace([np.inf, -np.inf], 0)
+
+            # Sanitizar columnas de Texto
+            # Asumimos que las constantes de índices (IDX_...) coinciden con posición
+            # Pero en process_app_upload ya se asignaron nombres de columnas si se usó header
+            # Mejor usar los nombres de columnas definidos en constants si existen en df
+            
+            if COL_BRAND in df.columns:
+                df[COL_BRAND] = df[COL_BRAND].fillna('SIN MARCA').astype(str).replace(['nan', 'NaN', ''], 'SIN MARCA')
+            
+            if COL_CATEGORY in df.columns:
+                df[COL_CATEGORY] = df[COL_CATEGORY].fillna('SIN CATEGORÍA').astype(str).replace(['nan', 'NaN', ''], 'SIN CATEGORÍA')
+
+            if COL_PRODUCT in df.columns:
+                 df[COL_PRODUCT] = df[COL_PRODUCT].fillna('').astype(str).replace(['nan', 'NaN'], '')
+
+            if COL_SKU in df.columns:
+                 df[COL_SKU] = df[COL_SKU].fillna('').astype(str).replace(['nan', 'NaN'], '')
 
             df['_stock'] = get_col(IDX_STOCK)
             df['_cost_u'] = get_col(IDX_COST_U)
@@ -93,7 +111,9 @@ class InventoryService:
             df = InventoryService._apply_abc_classification(df)
 
             df['margin'] = df['_price'] - df['_cost_u']
+            # Evitar división por cero y NaNs
             df['margin_pct'] = np.where(df['_price'] > 0, (df['margin'] / df['_price'] * 100), 0)
+            df['margin_pct'] = df['margin_pct'].replace([np.inf, -np.inf, np.nan], 0)
 
             user_data['analysis_cache'] = df
             return df
@@ -131,13 +151,19 @@ class InventoryService:
             except:
                 created_at = str(row['F. Creación'])[:10]
         
+        def safe_str(val, default=''):
+            s = str(val)
+            if s.lower() in ['nan', 'none', 'nat', '']:
+                return default
+            return s
+
         result = {
-            'id': int(row[COL_ID]) if pd.notna(row[COL_ID]) else 0,
-            'sku': str(row.get(COL_SKU, '')),
-            'product': str(row.get(COL_PRODUCT, '')),
-            'category': str(row.get(COL_CATEGORY, '')),
-            'brand': str(row.get(COL_BRAND, '')),
-            'stock': int(row['_stock']),
+            'id': int(row[COL_ID]) if COL_ID in row and pd.notna(row[COL_ID]) else 0,
+            'sku': safe_str(row.get(COL_SKU)),
+            'product': safe_str(row.get(COL_PRODUCT)),
+            'category': safe_str(row.get(COL_CATEGORY), 'SIN CATEGORÍA'),
+            'brand': safe_str(row.get(COL_BRAND), 'SIN MARCA'),
+            'stock': int(row['_stock']) if pd.notna(row['_stock']) else 0,
             'value': round(float(row['_cost_t']), 2),
             'status': row['stock_status'],
             'abc_class': row.get('abc_class', 'C'),
@@ -149,38 +175,64 @@ class InventoryService:
 
     @staticmethod
     def process_app_upload(file, filename):
-        """Procesa la subida de un archivo."""
-        import tempfile
+        """Procesa la subida de un archivo Excel directamente desde memoria."""
+        from io import BytesIO
         import gc
         
         store_name = os.path.splitext(filename)[0]
+        ext = os.path.splitext(filename)[1].lower()
         
-        # Usar directorio temporal del sistema
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
-            file.save(tmp_file.name)
-            tmp_path = tmp_file.name
+        # Leer archivo directamente a memoria (evita problemas con /tmp en Render)
+        try:
+            file_bytes = BytesIO(file.read())
+        except Exception as e:
+            print(f"Error leyendo archivo en memoria: {e}")
+            return None, f"Error leyendo el archivo: {str(e)}"
         
         gc.collect()
         
+        # Determinar engine según extensión
+        engine = 'openpyxl' if ext in ('.xlsx', '') else 'xlrd'
+        
         df = None
-        # Intentar leer con varios skiprows
+        errors = []
+        
         for skiprows in [1, 0, 2]:
             try:
-                df = pd.read_excel(tmp_path, skiprows=skiprows, engine='openpyxl')
+                file_bytes.seek(0)
+                df = pd.read_excel(file_bytes, skiprows=skiprows, engine=engine)
                 df.columns = df.columns.astype(str).str.strip()
+                
                 if len(df.columns) >= 10 and len(df) > 0:
+                    print(f"Upload OK: skiprows={skiprows}, {len(df)} filas, {len(df.columns)} cols")
+                    print(f"Columnas detectadas: {df.columns.tolist()}")
                     break
+                    
+                errors.append(f"skiprows={skiprows}: solo {len(df.columns)} columnas o {len(df)} filas")
                 df = None
-            except Exception:
+            except Exception as e:
+                errors.append(f"skiprows={skiprows}: {type(e).__name__}: {e}")
+                print(f"Upload parse intento fallido: skiprows={skiprows}: {e}")
+                df = None
                 continue
         
-        try:
-            os.unlink(tmp_path)
-        except:
-            pass
+        # Si openpyxl falló, intentar con xlrd por si es .xls disfrazado de .xlsx
+        if df is None and engine == 'openpyxl':
+            try:
+                file_bytes.seek(0)
+                df = pd.read_excel(file_bytes, skiprows=1, engine='xlrd')
+                df.columns = df.columns.astype(str).str.strip()
+                if len(df.columns) >= 10 and len(df) > 0:
+                    print(f"Upload OK con xlrd fallback: {len(df)} filas, {len(df.columns)} cols")
+                else:
+                    df = None
+            except Exception as e:
+                errors.append(f"xlrd fallback: {type(e).__name__}: {e}")
             
         if df is None:
-            return None, "No se pudo parsear el archivo Excel."
+            error_detail = "; ".join(errors) if errors else "Archivo vacío o formato no reconocido"
+            print(f"Upload falló completamente: {error_detail}")
+            return None, f"No se pudo parsear el archivo Excel. Detalle: {error_detail}"
             
         user_data = InventoryService.get_user_session()
         user_data['inventory_data'] = df
