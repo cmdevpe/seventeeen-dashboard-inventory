@@ -11,6 +11,7 @@ let currentPage = 1;
 
 // Format currency
 const formatCurrency = (value) => {
+  if (value === null || value === undefined || isNaN(value)) return "S/ 0";
   return new Intl.NumberFormat("es-PE", {
     style: "currency",
     currency: "PEN",
@@ -21,6 +22,7 @@ const formatCurrency = (value) => {
 
 // Format number
 const formatNumber = (value) => {
+  if (value === null || value === undefined || isNaN(value)) return "0";
   return new Intl.NumberFormat("es-PE").format(value);
 };
 
@@ -87,13 +89,23 @@ async function uploadExcel(event) {
 
     // Stage 2: Processing (30-70%)
     updateUploadProgress(40, "Procesando datos...", "Procesando Excel...");
-    const data = await response.json();
+
+    let data;
+    try {
+      data = await response.json();
+    } catch (e) {
+      throw new Error("Respuesta inválida del servidor");
+    }
 
     if (response.ok) {
       updateUploadProgress(70, data.message);
 
       // Stage 3: Loading dashboard (70-100%)
-      updateUploadProgress(80, "Actualizando dashboard...", "Cargando datos...");
+      updateUploadProgress(
+        80,
+        "Actualizando dashboard...",
+        "Cargando datos...",
+      );
       const loadSuccess = await loadData();
 
       if (loadSuccess) {
@@ -113,7 +125,7 @@ async function uploadExcel(event) {
   } catch (error) {
     console.error("Upload error:", error);
     hideUploadModal();
-    updateStatus(false, "Error de conexión");
+    updateStatus(false, error.message || "Error de conexión");
   }
 
   // Reset file input
@@ -153,12 +165,28 @@ async function loadData() {
     ]);
 
     // Verificar que TODAS las respuestas sean exitosas
-    const allResponses = [kpisRes, stockStatusRes, suppliersRes, categoriesRes, brandsRes, topProductsRes, alertsRes, metadataRes];
-    const failedRes = allResponses.find(r => !r.ok);
+    const allResponses = [
+      kpisRes,
+      stockStatusRes,
+      suppliersRes,
+      categoriesRes,
+      brandsRes,
+      topProductsRes,
+      alertsRes,
+      metadataRes,
+    ];
+    const failedRes = allResponses.find((r) => !r.ok);
     if (failedRes) {
-      const errData = await failedRes.json().catch(() => ({}));
-      console.error("API error:", failedRes.url, failedRes.status, errData);
-      throw new Error(errData.error || "API not available");
+      const errText = await failedRes.text().catch(() => "");
+      let errData = {};
+      try {
+        errData = JSON.parse(errText);
+      } catch (e) {}
+
+      console.error("API error:", failedRes.url, failedRes.status, errText);
+      throw new Error(
+        errData.error || `Error ${failedRes.status} al cargar datos`,
+      );
     }
 
     const kpis = await kpisRes.json();
@@ -206,7 +234,7 @@ async function loadData() {
       <div class="text-center">
         <div class="text-6xl mb-4">⚠️</div>
         <h3 class="text-xl font-semibold text-gray-300 mb-2">No se pudo cargar los datos</h3>
-        <p class="text-slate-500 mb-4">${error.message || 'Error de conexión con el servidor'}</p>
+        <p class="text-slate-500 mb-4">${error.message || "Error de conexión con el servidor"}</p>
         <button onclick="loadData()" class="px-6 py-2 bg-[#0c4a6e] hover:bg-[#0a3d5c] rounded-lg text-white font-medium">
           Reintentar
         </button>
@@ -220,7 +248,10 @@ async function loadData() {
 
 function renderKPIs(kpis) {
   const grid = document.getElementById("kpi-grid");
-  if (!grid) return;
+  if (!grid || !kpis) return;
+
+  // Ensure nested objects exist
+  if (!kpis.alerts) kpis.alerts = { total_alerts: 0, out_of_stock: 0 };
 
   const kpiCards = [
     {
@@ -282,7 +313,7 @@ function renderKPIs(kpis) {
           </div>
         </div>
       </div>
-    `
+    `,
     )
     .join("");
 }
@@ -291,7 +322,7 @@ function renderKPIs(kpis) {
 
 function renderStockStatus(data) {
   const panel = document.getElementById("stock-status-panel");
-  if (!panel) return;
+  if (!panel || !Array.isArray(data)) return;
 
   panel.innerHTML = `
     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -306,7 +337,7 @@ function renderStockStatus(data) {
           <p class="text-xs text-slate-500">${item.label}</p>
           <p class="text-xs font-medium" style="color: ${item.color}">${item.percentage}%</p>
         </div>
-      `
+      `,
         )
         .join("")}
     </div>
@@ -317,7 +348,7 @@ function renderStockStatus(data) {
             (item) => `
           <div class="status-bar" style="width: ${item.percentage}%; background-color: ${item.color};"
                title="${item.label}: ${item.count} productos"></div>
-        `
+        `,
           )
           .join("")}
       </div>
@@ -354,7 +385,7 @@ function filterByStatus(status) {
 
 function renderSuppliersChart(data) {
   const ctx = document.getElementById("suppliers-chart");
-  if (!ctx) return;
+  if (!ctx || !Array.isArray(data)) return;
 
   if (suppliersChart) suppliersChart.destroy();
 
@@ -399,7 +430,10 @@ function renderSuppliersChart(data) {
       scales: {
         x: {
           grid: { display: false },
-          ticks: { callback: (value) => formatCurrency(value), color: "#64748b" },
+          ticks: {
+            callback: (value) => formatCurrency(value),
+            color: "#64748b",
+          },
         },
         y: {
           grid: { display: false },
@@ -412,7 +446,7 @@ function renderSuppliersChart(data) {
 
 function renderCategoriesChart(data) {
   const container = document.getElementById("categories-chart-container");
-  if (!container) return;
+  if (!container || !Array.isArray(data)) return;
 
   if (categoriesChart) categoriesChart.destroy();
 
@@ -461,7 +495,11 @@ function renderCategoriesChart(data) {
       scales: {
         x: {
           grid: { color: "rgba(203, 213, 225, 0.3)", drawBorder: false },
-          ticks: { color: "#94a3b8", font: { size: 11 }, callback: (value) => formatCurrency(value) },
+          ticks: {
+            color: "#94a3b8",
+            font: { size: 11 },
+            callback: (value) => formatCurrency(value),
+          },
         },
         y: {
           grid: { display: false },
@@ -474,7 +512,7 @@ function renderCategoriesChart(data) {
 
 function renderBrandsChart(data) {
   const ctx = document.getElementById("brands-chart");
-  if (!ctx) return;
+  if (!ctx || !Array.isArray(data)) return;
 
   if (brandsChart) brandsChart.destroy();
 
@@ -520,7 +558,11 @@ function renderBrandsChart(data) {
         },
         y: {
           grid: { color: "rgba(203, 213, 225, 0.3)", drawBorder: false },
-          ticks: { color: "#94a3b8", font: { size: 11 }, callback: (value) => formatCurrency(value) },
+          ticks: {
+            color: "#94a3b8",
+            font: { size: 11 },
+            callback: (value) => formatCurrency(value),
+          },
         },
       },
     },
@@ -531,7 +573,7 @@ function renderBrandsChart(data) {
 
 function renderTopProductsTable(data) {
   const container = document.getElementById("top-products-table");
-  if (!container) return;
+  if (!container || !Array.isArray(data)) return;
 
   container.innerHTML = `
     <table class="w-full text-sm">
@@ -555,7 +597,7 @@ function renderTopProductsTable(data) {
             <td class="text-right py-2 px-2 text-slate-600">${formatNumber(item.stock)}</td>
             <td class="text-right py-2 px-2 text-[#0c4a6e] font-medium">${formatCurrency(item.value)}</td>
           </tr>
-        `
+        `,
           )
           .join("")}
       </tbody>
@@ -565,7 +607,7 @@ function renderTopProductsTable(data) {
 
 function renderAlertsTable(data) {
   const container = document.getElementById("alerts-table");
-  if (!container) return;
+  if (!container || !Array.isArray(data)) return;
 
   container.innerHTML = `
     <table class="w-full text-sm">
@@ -591,7 +633,7 @@ function renderAlertsTable(data) {
             <td class="text-right py-2 px-2 font-mono ${item.stock < 0 ? "text-red-500" : "text-slate-600"}">${item.stock}</td>
             <td class="text-right py-2 px-2 text-slate-600">${formatCurrency(item.value)}</td>
           </tr>
-        `
+        `,
           )
           .join("")}
       </tbody>
@@ -618,7 +660,7 @@ async function populateBrandFilter() {
   try {
     const response = await fetch(
       `${API_URL}/unique-brands?category=${encodeURIComponent(category)}`,
-      { credentials: "include" }
+      { credentials: "include" },
     );
     const brands = await response.json();
 
@@ -729,7 +771,7 @@ function renderSearchResults(data) {
             <td class="py-2 px-3 text-right text-[#0c4a6e] font-medium">${formatCurrency(item.value)}</td>
             <td class="py-2 px-3 text-center">${getStatusBadge(item.status)}</td>
           </tr>
-        `
+        `,
           )
           .join("")}
       </tbody>
@@ -765,8 +807,7 @@ function renderPagination(total) {
 
   if (startPage > 1)
     buttons += `<button class="pagination-btn" onclick="searchProducts(1)">1</button>`;
-  if (startPage > 2)
-    buttons += `<span class="px-2 text-slate-400">...</span>`;
+  if (startPage > 2) buttons += `<span class="px-2 text-slate-400">...</span>`;
 
   for (let i = startPage; i <= endPage; i++) {
     buttons += `<button class="pagination-btn ${i === currentPage ? "active" : ""}" onclick="searchProducts(${i})">${i}</button>`;
@@ -815,17 +856,27 @@ document.addEventListener("DOMContentLoaded", async () => {
   const yearEl = document.getElementById("current-year");
   if (yearEl) yearEl.textContent = new Date().getFullYear();
 
-  // Event listener for search input (Enter key)
+  // Event listener for search input (debounced auto-search)
   const searchInput = document.getElementById("search-input");
   if (searchInput) {
+    let searchTimeout = null;
+    searchInput.addEventListener("input", () => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => searchProducts(1), 300);
+    });
     searchInput.addEventListener("keypress", (e) => {
-      if (e.key === "Enter") searchProducts(1);
+      if (e.key === "Enter") {
+        clearTimeout(searchTimeout);
+        searchProducts(1);
+      }
     });
   }
 
   // Check if server has data loaded already
   try {
-    const healthRes = await fetch(`${API_URL}/health`, { credentials: "include" });
+    const healthRes = await fetch(`${API_URL}/health`, {
+      credentials: "include",
+    });
     const health = await healthRes.json();
     if (health.data_loaded) {
       loadData();
