@@ -373,3 +373,89 @@ def get_top_products():
     top_df = df[df['_stock'] > 0].sort_values('_cost_t', ascending=False).head(20)
     result = [InventoryService.product_to_dict(row) for _, row in top_df.iterrows()]
     return jsonify(result)
+
+@api_bp.route('/export')
+def export_excel():
+    """Exporta los datos filtrados a Excel."""
+    from flask import send_file
+    from io import BytesIO
+    
+    df = InventoryService.get_analysis()
+    if df is None: return jsonify({'error': 'No data loaded'}), 400
+    
+    query = request.args.get('q', '').lower()
+    status = request.args.get('status', '')
+    category = request.args.get('category', '')
+    brand = request.args.get('brand', '')
+    
+    mask = pd.Series([True] * len(df))
+    
+    if query:
+        mask &= (
+            df[COL_PRODUCT].astype(str).str.lower().str.contains(query, na=False, regex=False) |
+            df[COL_SKU].astype(str).str.lower().str.contains(query, na=False, regex=False) |
+            df[COL_CATEGORY].astype(str).str.lower().str.contains(query, na=False, regex=False) |
+            df[COL_BRAND].astype(str).str.lower().str.contains(query, na=False, regex=False)
+        )
+    
+    if status:
+        mask &= (df['stock_status'] == status)
+    if category:
+        mask &= (df[COL_CATEGORY].astype(str).str.lower() == category.lower())
+    if brand:
+        if brand == 'SIN_MARCA':
+            mask &= (df[COL_BRAND].isna() | (df[COL_BRAND].astype(str).str.strip() == '') | (df[COL_BRAND].astype(str).str.lower() == 'nan'))
+        else:
+            mask &= (df[COL_BRAND].astype(str).str.lower() == brand.lower())
+    
+    filtered = df[mask]
+    
+    # Seleccionar columnas para exportar
+    export_cols = []
+    col_names = {}
+    
+    if 'F. Creación' in filtered.columns:
+        export_cols.append('F. Creación')
+        col_names['F. Creación'] = 'Fecha'
+    if COL_SKU in filtered.columns:
+        export_cols.append(COL_SKU)
+    if COL_PRODUCT in filtered.columns:
+        export_cols.append(COL_PRODUCT)
+    if COL_CATEGORY in filtered.columns:
+        export_cols.append(COL_CATEGORY)
+    if COL_BRAND in filtered.columns:
+        export_cols.append(COL_BRAND)
+    
+    export_cols.extend(['_stock', '_cost_u', '_cost_t', '_price'])
+    col_names.update({
+        '_stock': 'Stock',
+        '_cost_u': 'Costo Unitario',
+        '_cost_t': 'Costo Total',
+        '_price': 'Precio'
+    })
+    
+    if 'stock_status' in filtered.columns:
+        export_cols.append('stock_status')
+        col_names['stock_status'] = 'Estado'
+    
+    # Solo columnas que existen
+    export_cols = [c for c in export_cols if c in filtered.columns]
+    export_df = filtered[export_cols].copy()
+    export_df.rename(columns=col_names, inplace=True)
+    
+    # Generar Excel en memoria
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        export_df.to_excel(writer, index=False, sheet_name='Inventario')
+    output.seek(0)
+    
+    user_data = InventoryService.get_user_session()
+    store_name = user_data.get('metadata', {}).get('store_name', 'inventario')
+    filename = f"{store_name}_export.xlsx"
+    
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=filename
+    )

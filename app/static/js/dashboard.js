@@ -729,6 +729,22 @@ async function searchProducts(page = 1) {
   }
 }
 
+// Exportar tabla filtrada a Excel
+function exportToExcel() {
+  const query = document.getElementById("search-input")?.value || "";
+  const category = document.getElementById("filter-category")?.value || "";
+  const brand = document.getElementById("filter-brand")?.value || "";
+  const status = document.getElementById("filter-status")?.value || "";
+
+  const params = new URLSearchParams();
+  if (query) params.append("q", query);
+  if (category) params.append("category", category);
+  if (brand) params.append("brand", brand);
+  if (status) params.append("status", status);
+
+  window.location.href = `${API_URL}/export?${params}`;
+}
+
 function renderSearchResults(data) {
   const container = document.getElementById("search-results");
   if (!container) return;
@@ -856,19 +872,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   const yearEl = document.getElementById("current-year");
   if (yearEl) yearEl.textContent = new Date().getFullYear();
 
-  // Event listener for search input (debounced auto-search)
+  // Event listener for search input (búsqueda en tiempo real)
   const searchInput = document.getElementById("search-input");
   if (searchInput) {
-    let searchTimeout = null;
-    searchInput.addEventListener("input", () => {
-      clearTimeout(searchTimeout);
-      searchTimeout = setTimeout(() => searchProducts(1), 300);
-    });
+    searchInput.addEventListener("input", () => searchProducts(1));
     searchInput.addEventListener("keypress", (e) => {
-      if (e.key === "Enter") {
-        clearTimeout(searchTimeout);
-        searchProducts(1);
-      }
+      if (e.key === "Enter") searchProducts(1);
     });
   }
 
