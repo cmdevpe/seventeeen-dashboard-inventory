@@ -4,8 +4,9 @@ import multiprocessing
 # Binding
 bind = "0.0.0.0:10000"
 
-# Workers - Usar 2 para plan gratuito (512MB RAM)
-workers = 2
+# Workers - Usar 1 porque los datos se guardan en memoria del proceso (SESSIONS dict).
+# Con >1 worker, los datos subidos en un worker no son visibles en otro.
+workers = 1
 worker_class = "sync"
 
 # Timeouts - Aumentados para procesar archivos grandes
